@@ -48,14 +48,14 @@ def data_preproc(data,outfile):
 			query = ' '.join(text_preproc(data['query'][i]))
 			product_title = ' '.join(text_preproc(data['product_title'][i]))
 			product_description = ' '.join(text_preproc(data['product_description'][i]))
-			fo.writerow([data['id'],query,product_title,product_description,data['median_relevance'][i],data['relevance_variance'][i]])
+			fo.writerow([data['id'][i],query,product_title,product_description,data['median_relevance'][i],data['relevance_variance'][i]])
 	else:
 		fo.writerow(['id','query','product_title','product_description'])
 		for i in xrange(len(data.id)):
 			query = ' '.join(text_preproc(data['query'][i]))
 			product_title = ' '.join(text_preproc(data['product_title'][i]))
 			product_description = ' '.join(text_preproc(data['product_description'][i]))
-			fo.writerow([data['id'],query,product_title,product_description])
+			fo.writerow([data['id'][i],query,product_title,product_description])
 
 def count_word_feature(data):
 	query_count = []
@@ -65,6 +65,18 @@ def count_word_feature(data):
 		query_count.append(len(data['query'][i].split(' ')))
 		p_title_count.append(len(data['product_title'][i].split(' ')))
 		p_des_count.append(len(data['product_description'][i].split(' ')))
-	c_feature = pd.DataFrame({'query_count':query_count,'product_title_count':p_title_count,'product_description_count':p_des_count})
+	c_feature = pd.DataFrame({'query':data['query'].values,'query_count':query_count,'product_title_count':p_title_count,'product_description_count':p_des_count})
 	return c_feature
 
+def mr_of_train_query(train_data):
+	query_set = set(list(train_data['query']))
+	query_dict = {}
+	for q in query_set:
+		query_dict[q] = []
+	for i in xrange(len(train_data)):
+		query_dict[train_data['query'][i]].append(train_data['median_relevance'][i])
+	fo = csv.writer(open('../query_label_stat.csv','w'),lineterminator='\n')
+	fo.writerow(['query','mean','max','min','std'])
+	for q in query_dict:
+		ay = np.array(query_dict[q])
+		fo.writerow([q,ay.mean(),ay.max(),ay.min(),ay.std()])
