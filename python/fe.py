@@ -67,3 +67,4 @@ def count_word_feature(data):
 		p_des_count.append(len(data['product_description'][i].split(' ')))
 	c_feature = pd.DataFrame({'query_count':query_count,'product_title_count':p_title_count,'product_description_count':p_des_count})
 	return c_feature
+
