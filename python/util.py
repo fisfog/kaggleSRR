@@ -3,7 +3,8 @@
 import pandas as pd
 import numpy as np
 import scipy as sp
-
+import math
+import csv
 
 # The following 3 functions have been taken from Ben Hamner's github repository
 # https://github.com/benhamner/Metrics
@@ -88,3 +89,37 @@ def quadratic_weighted_kappa(y, y_pred):
             denominator += d * expected_count / num_scored_items
 
     return (1.0 - numerator / denominator)
+
+
+def wilson_lower_limit(p,n,z=1.96):
+	zz = z*z
+	ll = p + (1.0/(2*n))*zz - z * np.sqrt((p*(1.0-p))/n+zz/(4*n*n))
+	ll /= (1+(1.0/n)*zz)
+	return ll
+
+def split_data(train):
+	fo_train = csv.writer(open('../offline/offline_train.csv','w'),lineterminator='\n')	
+	fo_test = csv.writer(open('../offline/offline_test.csv','w'),lineterminator='\n')	
+	fo_train.writerow(["id","query","product_title","product_description","median_relevance","relevance_variance"])
+	fo_test.writerow(["id","query","product_title","product_description","median_relevance","relevance_variance"])
+	for i in xrange(len(train)):
+		rd = np.random.random()
+		if rd <= 0.8:
+			fo_train.writerow(train.values[i])
+		else:
+			fo_test.writerow(train.values[i])
+
+
+def loadWord2vec(vocab,w2v):
+    word2vec_dict = {}
+    fv = open(vocab)
+    fw2v = open(w2v)
+    word_list = []
+    vector = []
+    for l in fv:
+        word_list.append(l.strip('\r\n'))
+    for l in fw2v:
+        vector.append(l.strip('\r\n').split())
+    for i in xrange(len(word_list)):
+        word2vec_dict[word_list[i]] = np.array(vector[i]).astype(np.float64)
+    return word2vec_dict

@@ -8,6 +8,7 @@ __author__ : Abhishek
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import SVC
 from sklearn.decomposition import TruncatedSVD
@@ -17,13 +18,17 @@ from nltk.stem.porter import *
 import pandas as pd
 import numpy as np
 import re
-# from bs4 import BeautifulSoup
+import fe
+import util
+from bs4 import BeautifulSoup
 from sklearn.pipeline import Pipeline
-from sklearn.decomposition import TruncatedSVD
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
-from sklearn.feature_extraction.text import TfidfVectorizer
+# from sklearn.decomposition import TruncatedSVD
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.svm import SVC
+# from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction import text
+import xgboost as xgb
+
 # array declarations
 sw=[]
 s_data = []
@@ -125,10 +130,15 @@ def quadratic_weighted_kappa(y, y_pred):
 
 
 if __name__ == '__main__':
+    # train = pd.read_csv('./train_after_preproc.csv').fillna("")
+    # test = pd.read_csv('./test_after_preproc.csv').fillna("")
+    # cftrain = fe.count_word_feature(train)
+    # cftest = fe.count_word_feature(test)
+
 
     # Load the training file
-    train = pd.read_csv('../input/train.csv')
-    test = pd.read_csv('../input/test.csv')
+    train = pd.read_csv('../train.csv')
+    test = pd.read_csv('../test.csv')
     
     # we dont need ID columns
     idx = test.id.values.astype(int)
@@ -151,7 +161,7 @@ if __name__ == '__main__':
     
     # Fit TFIDF
     tfv.fit(traindata)
-    X =  tfv.transform(traindata) 
+    X =  tfv.transform(traindata)
     X_test = tfv.transform(testdata)
     
     # Initialize SVD
@@ -169,8 +179,8 @@ if __name__ == '__main__':
                     	     ('svm', svm_model)])
     
     # Create a parameter grid to search for best parameters for everything in the pipeline
-    param_grid = {'svd__n_components' : [400],
-                  'svm__C': [10]}
+    param_grid = {'svd__n_components' : [300,350,380,400],
+                  'svm__C': [1,5,10,15]}
     
     # Kappa Scorer 
     kappa_scorer = metrics.make_scorer(quadratic_weighted_kappa, greater_is_better = True)
@@ -182,6 +192,7 @@ if __name__ == '__main__':
     # Fit Grid Search Model
     model.fit(X, y)
     print("Best score: %0.3f" % model.best_score_)
+    a_best_s = model.best_score_
     print("Best parameters set:")
     best_parameters = model.best_estimator_.get_params()
     for param_name in sorted(param_grid.keys()):
@@ -193,10 +204,11 @@ if __name__ == '__main__':
     # Fit model with best parameters optimized for quadratic_weighted_kappa
     best_model.fit(X,y)
     preds = best_model.predict(X_test)
+    A_pd = pd.DataFrame({'id':idx,'ap':preds})
     
     #load data
-    train = pd.read_csv("../input/train.csv").fillna("")
-    test  = pd.read_csv("../input/test.csv").fillna("")
+    train = pd.read_csv("../train.csv").fillna("")
+    test  = pd.read_csv("../test.csv").fillna("")
     
     #remove html, remove non text or numeric, make query and title unique features for counts using prefix (accounted for in stopwords tweak)
     stemmer = PorterStemmer()
@@ -217,7 +229,9 @@ if __name__ == '__main__':
     
     
     for i in range(len(train.id)):
-        s=(" ").join(["q"+ z for z in BeautifulSoup(train["query"][i]).get_text(" ").split(" ")]) + " " + (" ").join(["z"+ z for z in BeautifulSoup(train.product_title[i]).get_text(" ").split(" ")]) + " " + BeautifulSoup(train.product_description[i]).get_text(" ")
+        s=(" ").join(["q"+ z for z in BeautifulSoup(train["query"][i]).get_text(" ").split(" ")])\
+                     + " " + (" ").join(["z"+ z for z in BeautifulSoup(train.product_title[i]).get_text(" ").split(" ")])\
+                      + " " + BeautifulSoup(train.product_description[i]).get_text(" ")
         s=re.sub("[^a-zA-Z0-9]"," ", s)
         s= (" ").join([stemmer.stem(z) for z in s.split(" ")])
         s_data.append(s)
@@ -231,14 +245,149 @@ if __name__ == '__main__':
     clf = Pipeline([('v',TfidfVectorizer(min_df=5, max_df=500, max_features=None, strip_accents='unicode', analyzer='word', token_pattern=r'\w{1,}', ngram_range=(1, 2), use_idf=True, smooth_idf=True, sublinear_tf=True, stop_words = 'english')), 
     ('svd', TruncatedSVD(n_components=200, algorithm='randomized', n_iter=5, random_state=None, tol=0.0)), 
     ('scl', StandardScaler(copy=True, with_mean=True, with_std=True)), 
-    ('svm', SVC(C=10.0, kernel='rbf', degree=3, gamma=0.0, coef0=0.0, shrinking=True, probability=False, tol=0.001, cache_size=200, class_weight=None, verbose=False, max_iter=-1, random_state=None))])
+    ('svm', SVC(C=11, kernel='rbf', degree=3, gamma=0.0, coef0=0.0, shrinking=True, probability=False, tol=0.001, cache_size=200, class_weight=None, verbose=False, max_iter=-1, random_state=None))])
     clf.fit(s_data, s_labels)
     t_labels = clf.predict(t_data)
+    B_pd = pd.DataFrame({'id':idx,'bp':t_labels})
+
+
+    # myl
+
+    train = pd.read_csv('../train_after_preproc.csv').fillna("")
+    test = pd.read_csv('../test_after_preproc.csv').fillna("")
+
+    # cftrain_rv0 = fe.count_word_feature(train,1)
+    # cftrain_rv1 = fe.count_word_feature(train,2)
+    cftrain = fe.count_word_feature(train)
+    cftest = fe.count_word_feature(test)
+
+    query_label_stat = pd.read_csv('../query_label_stat.csv')
+
+    # features_train_rv0 = pd.merge(cftrain_rv0,query_label_stat)
+    # features_train_rv1 = pd.merge(cftrain_rv1,query_label_stat)
+    features_train = pd.merge(cftrain,query_label_stat)
+    features_test = pd.merge(cftest,query_label_stat)
+
+    # y_rv0 = features_train_rv0.median_relevance.values
+    # X_train_rv0 = features_train_rv0.drop(['query','id','median_relevance'],axis=1).values
+    # y_rv1 = features_train_rv1.median_relevance.values
+    # X_train_rv1 = features_train_rv1.drop(['query','id','median_relevance'],axis=1).values
+
+    y = features_train.median_relevance.values
+    X_train = features_train.drop(['query','id','median_relevance'],axis=1).values
+
+    X_test = features_test.drop(['query','id'],axis=1).values
+    c_idx = features_test['id'].values.astype(int)
+
+    # RandomForestClassifier
+    # rf = RandomForestClassifier(n_jobs=2,n_estimators=70,min_samples_split=4,max_depth=8)
+    # clf = pipeline.Pipeline([('rf',rf)])
+    # param_grid = {'rf__n_estimators': [50,60,70,80,90,100],
+    #             'rf__min_samples_split':[3,4,5],
+    #             'rf__max_depth':[3,4,5,6,7]}
+
+    # kappa_scorer = metrics.make_scorer(util.quadratic_weighted_kappa, greater_is_better = True)
+
+    # model = grid_search.GridSearchCV(estimator = clf, param_grid=param_grid, scoring=kappa_scorer,
+    #                              verbose=10, n_jobs=-1, iid=True, refit=True, cv=2)
+
+    # model.fit(X_train, y)
+    # print("Best score: %0.3f" % model.best_score_)
+
+    # print("Best parameters set:")
+    # best_parameters = model.best_estimator_.get_params()
+    # for param_name in sorted(param_grid.keys()):
+    #     print("\t%s: %r" % (param_name, best_parameters[param_name]))
+
+    # best_model = model.best_estimator_
+
+    # myl_ypreds_rf = best_model.predict(X_test)
+
+    # scl = StandardScaler()
+    # svm_model = SVC()
+    # param_grid = {'svm__C':[5,6,7,8,9,10,11,12,13]}
+    # clf = pipeline.Pipeline([('scl', scl),
+    #                     ('svm', svm_model)])
+    # model = grid_search.GridSearchCV(estimator = clf, param_grid=param_grid, scoring=kappa_scorer,
+    #                              verbose=10, n_jobs=-1, iid=True, refit=True, cv=2)
+    # model.fit(X_train, y)
+    # print("Best score: %0.3f" % model.best_score_)
+
+    # print("Best parameters set:")
+    # best_parameters = model.best_estimator_.get_params()
+    # for param_name in sorted(param_grid.keys()):
+    #     print("\t%s: %r" % (param_name, best_parameters[param_name]))
+    # best_model = model.best_estimator_
+
+    # myl_ypreds_svm = best_model.predict(X_test)
+
+   
+    #####################XGBoost############################
+    # rv0 5,6,40
+    # param_rv0 = {}
+    # param_rv0['eta'] = 0.05
+    # param_rv0['max_depth'] = 6
+    # param_rv0['silent'] = 1
+    # # param_rv0['min_child_weight'] = 100
+    # param_rv0['objective'] = 'multi:softmax'
+    # param_rv0['num_class'] = 4
+    # param_rv0['nthread'] = 2    
+
+    # # rv1 4,6,90
+    # param_rv1 = {}
+    # param_rv1['eta'] = 0.04
+    # param_rv1['max_depth'] = 6
+    # param_rv1['silent'] = 1
+    # # param_rv1['min_child_weight'] = 100
+    # param_rv1['objective'] = 'multi:softmax'
+    # param_rv1['num_class'] = 4
+    # param_rv1['nthread'] = 2
+
+
+    param = {}
+    param['eta'] = 0.04
+    param['max_depth'] = 6
+    param['silent'] = 1
+    # param_rv0['min_child_weight'] = 100
+    param['objective'] = 'multi:softmax'
+    param['num_class'] = 4
+    param['nthread'] = 2  
+
+    # n_rv0 = 40
+    # n_rv1 = 90
+    num_round = 75
+
+    # dtrain_rv0 = xgb.DMatrix(X_train_rv0,label=y_rv0-1)
+    # dtrain_rv1 = xgb.DMatrix(X_train_rv1,label=y_rv1-1)
+    dtrain = xgb.DMatrix(X_train,label=y-1)
+    dtest = xgb.DMatrix(X_test)
+    # bst_rv0 = xgb.train(param_rv0,dtrain_rv0,n_rv0)
+    # bst_rv1 = xgb.train(param_rv1,dtrain_rv1,n_rv1)
+    bst = xgb.train(param,dtrain,num_round)
+    # myl_ypreds_rv0 = bst_rv0.predict(dtest)+1
+    # myl_ypreds_rv1 = bst_rv1.predict(dtest)+1
+    # myl_ypreds = np.floor((myl_ypreds_rv0+myl_ypreds_rv1)/2).astype(int)
     
+    myl_ypreds_gbdt = bst.predict(dtest)+1
+
+    # myl_ypreds = np.floor((myl_ypreds_gbdt+myl_ypreds_rf)/2).astype(int)
+    C_pd = pd.DataFrame({'id':c_idx,'cp':myl_ypreds_gbdt})
+
+    # D_pd = pd.read_csv('../submission/cf-submission.csv')
+    # D_pd.columns = 'id','dp'
+
+    final_preds = pd.merge(A_pd,B_pd)
+    final_preds = pd.merge(final_preds,C_pd)
+    # final_preds = pd.merge(final_preds,D_pd)
+
+    # print "Cpred%d"%len(C_pd)
+    # print len(final_preds)
+    # print "len(idx)%d"%len(idx)
     import math
     p3 = []
-    for i in range(len(preds)):
-        x = (int(t_labels[i]) + preds[i])/2
+    for i in range(len(final_preds)):
+        # x = (int(t_labels[i]) + preds[i] + myl_ypreds[i])/3
+        x = (final_preds['ap'][i]+int(final_preds['bp'][i])+final_preds['cp'][i])/3
         x = math.floor(x)
         p3.append(int(x))
         
@@ -252,4 +401,4 @@ if __name__ == '__main__':
 
     # Create your first submission file
     submission = pd.DataFrame({"id": idx, "prediction": p3})
-    submission.to_csv("beating_the_benchmark_yet_again.csv", index=False)
+    submission.to_csv("../submission/tfidf_porter_mylXgb13.csv", index=False)
